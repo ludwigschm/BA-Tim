@@ -172,6 +172,31 @@ class TabletopController:
             return block_index in (1, 3)
         return block_index in (2, 4)
 
+    @staticmethod
+    def should_swap_vp_hands(block_index: int) -> bool:
+        return block_index in (2, 3)
+
+    def _normalized_block_index(self, block: Dict[str, Any]) -> int:
+        index_raw = block.get("index")
+        try:
+            return int(index_raw)
+        except (TypeError, ValueError):
+            return self.state.current_block_idx + 1
+
+    def _plan_for_block(
+        self, block: Dict[str, Any], plan: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        block_index = self._normalized_block_index(block)
+        if not self.should_swap_vp_hands(block_index):
+            return plan
+        swapped = dict(plan)
+        swapped["vp1"], swapped["vp2"] = plan.get("vp2"), plan.get("vp1")
+        return swapped
+
+    def _starter_for_block(self, block: Dict[str, Any]) -> int:
+        block_index = self._normalized_block_index(block)
+        return 2 if self.should_swap_vp_hands(block_index) else 1
+
     def get_current_plan(self) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
         state = self.state
         if not state.blocks or state.session_finished or state.in_block_pause:
@@ -184,7 +209,8 @@ class TabletopController:
             return None
         if state.current_round_idx >= len(rounds):
             return None
-        return block, rounds[state.current_round_idx]
+        plan = rounds[state.current_round_idx]
+        return block, self._plan_for_block(block, plan)
 
     def compute_global_round(self) -> int:
         state = self.state
@@ -283,6 +309,10 @@ class TabletopController:
         if plan_info:
             block, plan = plan_info
             state.current_block_info = block
+            if state.current_round_idx == 0:
+                state.signaler = self._starter_for_block(block)
+                state.judge = 1 if state.signaler == 2 else 2
+                self.update_turn_order()
             state.next_block_preview = None
             state.round_in_block = state.current_round_idx + 1
             state.current_round_has_stake = bool(block.get("payout"))
