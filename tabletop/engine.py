@@ -50,15 +50,11 @@ __all__ = [
     "SessionCsvLogger",
     "GameEngineConfig",
     "GameEngine",
-    "POINTS_PER_WIN",
 ]
 
 
 log = logging.getLogger(__name__)
 
-
-# Points awarded for a win when stakes/payouts are active.
-POINTS_PER_WIN = 3
 
 
 # ---------------- Enums ----------------
@@ -523,8 +519,6 @@ class SessionCsvLogger:
         "Taste",
         "Time",
         "Gewinner",
-        "Punkte VP1",
-        "Punkte VP2",
     ]
 
     def __init__(self, path: pathlib.Path):
@@ -563,7 +557,6 @@ class SessionCsvLogger:
         payload: Dict[str, Any],
         timestamp_iso: str,
         round_index_override: Optional[int] = None,
-        scores: Optional[Dict[VP, int]] = None,
         event_id: Optional[str] = None,
     ) -> None:
         is_reveal = actor == "SYS" and action == "reveal_and_score"
@@ -589,12 +582,6 @@ class SessionCsvLogger:
             winner = rs.winner.value
 
         round_idx = rs.index if round_index_override is None else round_index_override
-        score_vp1 = ""
-        score_vp2 = ""
-        if scores:
-            score_vp1 = scores.get(VP.VP1, "")
-            score_vp2 = scores.get(VP.VP2, "")
-
         row = [
             session_value,
             event_id or "",
@@ -610,8 +597,6 @@ class SessionCsvLogger:
             self._action_label(actor, action, payload),
             timestamp_iso,
             winner,
-            score_vp1,
-            score_vp2,
         ]
         self._buffer.append(row)
 
@@ -673,9 +658,6 @@ class GameEngine:
         )
         self.session_csv = SessionCsvLogger(session_csv_path)
         self.scores: Optional[Dict[VP, int]] = None
-        if cfg.payout:
-            start_points = 0
-            self.scores = {VP.VP1: start_points, VP.VP2: start_points}
         # Runde 1: VP1 ist Spieler 1, VP2 ist Spieler 2
         roles = RoleMap(p1_is=VP.VP1, p2_is=VP.VP2)
         self.round_idx = 0
@@ -686,10 +668,6 @@ class GameEngine:
         if self.current.phase not in allowed:
             raise RuntimeError(f"Falsche Phase: {self.current.phase.name}")
 
-    def _score_snapshot(self) -> Optional[Dict[VP, int]]:
-        if self.scores is None:
-            return None
-        return {VP.VP1: self.scores[VP.VP1], VP.VP2: self.scores[VP.VP2]}
 
     def _log(
         self,
@@ -710,7 +688,6 @@ class GameEngine:
             payload,
             data["t_utc_iso"],
             round_index_override=round_idx,
-            scores=self._score_snapshot(),
             event_id=data.get("event_id"),
         )
 
@@ -724,13 +701,8 @@ class GameEngine:
         )
 
     def _update_scores(self, winner: Optional[Player]) -> None:
-        if self.scores is None or winner is None:
-            return
-        if winner == Player.P1:
-            winner_vp = self.current.roles.p1_is
-        else:
-            winner_vp = self.current.roles.p2_is
-        self.scores[winner_vp] += POINTS_PER_WIN
+        _ = winner
+        return
 
     # --- Öffentliche API (UI) ---
 
@@ -826,11 +798,6 @@ class GameEngine:
             payload_call["p1_truth_ui"] = bool(p1_hat_wahrheit_gesagt)
         if winner is not None:
             payload_call["winner"] = winner.value
-        if self.scores is not None:
-            payload_call["scores"] = {
-                VP.VP1.value: self.scores[VP.VP1],
-                VP.VP2.value: self.scores[VP.VP2],
-            }
         self._log("P2", "call", payload_call)
 
         # Für Reveal/Score: echte Kartenwerte beider VPs
@@ -894,12 +861,6 @@ class GameEngine:
             "p2_call": None if rs.p2_call is None else rs.p2_call.value,
             "winner": None if rs.winner is None else rs.winner.value,
             "outcome_reason": rs.outcome_reason,
-            "scores": None
-            if self.scores is None
-            else {
-                VP.VP1.value: self.scores[VP.VP1],
-                VP.VP2.value: self.scores[VP.VP2],
-            },
         }
 
     # --- Interna ---

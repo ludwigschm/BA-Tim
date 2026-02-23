@@ -274,15 +274,9 @@ class TabletopController:
             state.round_in_block = state.current_round_idx + 1
             state.current_round_has_stake = bool(block.get("payout"))
             state.current_block_total_rounds = len(block.get("rounds") or [])
-            if block.get("payout") and state.score_state_block != block.get("index"):
-                state.score_state = {1: 0, 2: 0}
-                state.score_state_block = block.get("index")
-            if not block.get("payout"):
-                state.score_state = None
-                state.score_state_block = None
-            state.score_state_round_start = (
-                state.score_state.copy() if state.score_state else None
-            )
+            state.score_state = None
+            state.score_state_block = None
+            state.score_state_round_start = None
             state.round = self.compute_global_round()
         else:
             if state.current_block_idx >= len(state.blocks):
@@ -292,9 +286,7 @@ class TabletopController:
             state.current_round_has_stake = False
             state.current_block_total_rounds = 0
             state.round = self.compute_global_round()
-            state.score_state_round_start = (
-                state.score_state.copy() if state.score_state else None
-            )
+            state.score_state_round_start = None
         state.player_signals = {1: None, 2: None}
         state.player_decisions = {1: None, 2: None}
         state.last_outcome = {

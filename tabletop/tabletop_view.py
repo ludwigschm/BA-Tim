@@ -44,7 +44,7 @@ from tabletop.overlay.process import start_overlay_process, stop_overlay_process
 from tabletop.state.controller import TabletopController, TabletopState
 from tabletop.state.phases import UXPhase, to_engine_phase
 from tabletop.ui import widgets as ui_widgets
-from tabletop.engine import POINTS_PER_WIN, EventLogger
+from tabletop.engine import EventLogger
 from tabletop.utils.async_tasks import AsyncCallQueue
 from tabletop.utils.input_timing import Debouncer
 from tabletop.utils.runtime import (
@@ -1122,9 +1122,7 @@ class TabletopRoot(FloatLayout):
         return self.controller.compute_global_round()
 
     def score_line_text(self):
-        if self.score_state:
-            return f'Spielstand – VP1: {self.score_state[1]} | VP2: {self.score_state[2]}'
-        return 'Spielstand – VP1: - | VP2: -'
+        return ''
 
     def get_current_plan(self):
         return self.controller.get_current_plan()
@@ -1716,17 +1714,6 @@ class TabletopRoot(FloatLayout):
         # Karten in der Mitte anzeigen
         self.refresh_center_cards(reveal=True)
         outcome = self.compute_outcome()
-        if (
-            self.current_round_has_stake
-            and self.score_state
-            and not self.outcome_score_applied
-        ):
-            winner = outcome.get('winner') if outcome else None
-            if winner in (1, 2):
-                winner_role = self.role_by_physical.get(winner)
-                if winner_role in (1, 2):
-                    self.score_state[winner_role] += POINTS_PER_WIN
-                    self.outcome_score_applied = True
         if self.session_configured:
             self.log_event(None, 'showdown', outcome or {})
         self.update_user_displays()
@@ -1829,21 +1816,6 @@ class TabletopRoot(FloatLayout):
             return 'Gewonnen'
         return 'Verloren'
 
-    def _result_with_score_for_vp(self, vp:int):
-        base = self._result_for_vp(vp)
-        if not base:
-            return ''
-        if base == 'Unentschieden':
-            return 'Unentschieden 0'
-        if base == 'Gewonnen':
-            return f'Gewonnen +{POINTS_PER_WIN}'
-        return 'Verloren 0'
-
-    def _points_for_vp(self, vp:int):
-        if not self.score_state:
-            return None
-        return self.score_state.get(vp)
-
     def format_user_display_text(self, vp:int):
         """Erzeugt den Text fürs Display gemäß Block (1/3 vs. 2/4)."""
         if self.intro_active:
@@ -1865,10 +1837,6 @@ class TabletopRoot(FloatLayout):
         else:
             header_role = f'VP {vp}'
 
-        # Block-Logik
-        block_idx = self.current_block_info['index'] if self.current_block_info else None
-        with_points = bool(self.current_round_has_stake) and block_idx in (2,4)
-
         # Signal & Urteil (global – beziehen sich auf aktuelle Runde)
         signal_choice = self.last_outcome.get('signal_choice') if self.last_outcome else self.player_signals.get(self.signaler)
         judge_choice = self.last_outcome.get('judge_choice') if self.last_outcome else self.player_decisions.get(self.judge)
@@ -1882,14 +1850,8 @@ class TabletopRoot(FloatLayout):
         ergebnis_urteil = self._result_judge_text(judge_ok)
         outcome_statement = self._outcome_statement(truthful, judge_choice)
 
-        if with_points:
-            points = self._points_for_vp(vp)
-            punkte = f' | Punkte: {points}' if points is not None else ''
-            header = f'{header_round} | {header_role}{punkte}'
-            result_line = self._result_with_score_for_vp(vp)
-        else:
-            header = f'{header_round} | {header_role}'
-            result_line = self._result_for_vp(vp)
+        header = f'{header_round} | {header_role}'
+        result_line = self._result_for_vp(vp)
 
         column_width = 34
 
