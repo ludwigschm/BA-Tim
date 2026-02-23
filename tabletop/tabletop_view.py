@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional,
 import numpy as np
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.properties import DictProperty, NumericProperty, ObjectProperty
+from kivy.properties import DictProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
@@ -23,6 +23,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.spinner import Spinner
 from kivy.uix.switch import Switch
 from kivy.uix.textinput import TextInput
+from kivy.uix.togglebutton import ToggleButton
 
 from tabletop.core.clock import now_ns
 from tabletop.data.blocks import load_blocks, load_csv_rounds, value_to_card_path
@@ -145,6 +146,7 @@ class TabletopRoot(FloatLayout):
     fixation_overlay = ObjectProperty(None)
     fixation_image = ObjectProperty(None)
     round_badge = ObjectProperty(None)
+    start_mode = StringProperty("C")
 
     signal_buttons = DictProperty({})
     decision_buttons = DictProperty({})
@@ -204,6 +206,7 @@ class TabletopRoot(FloatLayout):
         elif not state.blocks:
             state.blocks = load_blocks()
         self.controller = controller or TabletopController(state)
+        self.start_mode = getattr(self.controller.state, 'start_mode', 'C')
         self._blocks = state.blocks if state.blocks else load_blocks()
         self.aruco_enabled = False
         self._aruco_proc = None
@@ -278,6 +281,11 @@ class TabletopRoot(FloatLayout):
             Clock.schedule_once(lambda *_: self.prompt_session_number(), 0.1)
 
     def __setattr__(self, key, value):
+        if key == 'start_mode':
+            super().__setattr__(key, (value or 'C').upper())
+            if 'controller' in self.__dict__:
+                setattr(self.controller.state, 'start_mode', self.start_mode)
+            return
         if key in self._STATE_FIELDS and 'controller' in self.__dict__:
             setattr(self.controller.state, key, value)
             return
@@ -767,6 +775,7 @@ class TabletopRoot(FloatLayout):
                 'session_id': self.session_id,
                 'aruco_enabled': self.aruco_enabled,
                 'start_block': self.start_block,
+                'start_mode': self.start_mode,
             },
         )
         self._mark_bridge_dirty()
@@ -2221,6 +2230,29 @@ class TabletopRoot(FloatLayout):
         )
         row2.add_widget(block_spinner)
 
+        row3 = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
+        row3.add_widget(Label(text='Startmodus'))
+        selected_start_mode = (self.start_mode or 'C').upper()
+        start_mode_c_btn = ToggleButton(
+            text='Start C',
+            group='session_start_mode',
+            allow_no_selection=False,
+            state='down' if selected_start_mode == 'C' else 'normal',
+            size_hint=(None, None),
+            size=('120dp', '40dp'),
+        )
+        start_mode_t_btn = ToggleButton(
+            text='Start T',
+            group='session_start_mode',
+            allow_no_selection=False,
+            state='down' if selected_start_mode == 'T' else 'normal',
+            size_hint=(None, None),
+            size=('120dp', '40dp'),
+        )
+
+        row3.add_widget(start_mode_c_btn)
+        row3.add_widget(start_mode_t_btn)
+
         error_label = Label(text='', color=(1, 0, 0, 1), size_hint_y=None, height='24dp')
 
         buttons = BoxLayout(size_hint_y=None, height='44dp', spacing=8)
@@ -2233,6 +2265,7 @@ class TabletopRoot(FloatLayout):
         content.add_widget(session_input)
         content.add_widget(row1)
         content.add_widget(row2)
+        content.add_widget(row3)
         content.add_widget(error_label)
         content.add_widget(buttons)
 
@@ -2256,6 +2289,7 @@ class TabletopRoot(FloatLayout):
                 start_block_choice = 1
             start_block_choice = self._clamp_start_block_choice(start_block_choice)
             aruco_active = bool(overlay_switch.active)
+            self.start_mode = 'T' if start_mode_t_btn.state == 'down' else 'C'
 
             popup.dismiss()
             self.session_popup = None
