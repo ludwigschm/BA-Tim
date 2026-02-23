@@ -28,6 +28,7 @@ from tabletop.core.clock import now_ns
 from tabletop.data.blocks import load_blocks, load_csv_rounds, value_to_card_path
 from tabletop.data.config import ARUCO_OVERLAY_PATH, ROOT
 from tabletop.logging import async_bridge
+from tabletop.logging.events_bridge import push_async
 from tabletop.logging.events import Events
 from tabletop.logging.round_csv import (
     close_round_log,
@@ -925,6 +926,7 @@ class TabletopRoot(FloatLayout):
         self.p2_pressed = False
         self.player_signals = {1: None, 2: None}
         self.player_decisions = {1: None, 2: None}
+        self._block_markers_sent = {"start": set(), "end": set()}
         self.status_lines = {1: [], 2: []}
         self.status_labels = {1: None, 2: None}
         self.last_outcome = {
@@ -1270,6 +1272,9 @@ class TabletopRoot(FloatLayout):
             if blocked_reason is not None:
                 return
 
+            if action == "start_click":
+                self._maybe_send_block_start_marker()
+
             if who == 1:
                 self.p1_pressed = True
             else:
@@ -1578,6 +1583,7 @@ class TabletopRoot(FloatLayout):
             )
             if not result.accepted:
                 return
+            self._maybe_send_block_end_marker()
             for choice, btn_id in self.decision_buttons.get(player, {}).items():
                 btn = self.wid_safe(btn_id)
                 if btn is None:
@@ -1598,6 +1604,58 @@ class TabletopRoot(FloatLayout):
     def goto(self, phase):
         self.phase = phase
         self.apply_phase()
+
+    def _current_block_index(self) -> Optional[int]:
+        if not self.current_block_info:
+            return None
+        try:
+            block_index = self.current_block_info.get("index")
+            return int(block_index) if block_index is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _push_cloud_marker(self, event_id: str) -> None:
+        event = {
+            "session": self.session_number,
+            "block": self._current_block_index(),
+            "event_id": event_id,
+            "t_ns": now_ns(),
+            "t_utc_iso": datetime.utcnow().isoformat(),
+        }
+        push_async(event)
+
+    def _maybe_send_block_start_marker(self) -> None:
+        block_index = self._current_block_index()
+        if block_index is None:
+            return
+        try:
+            round_in_block = int(self.round_in_block or 0)
+        except (TypeError, ValueError):
+            return
+        if round_in_block != 1:
+            return
+        start_sent = self._block_markers_sent.setdefault("start", set())
+        if block_index in start_sent:
+            return
+        start_sent.add(block_index)
+        self._push_cloud_marker(f"start.block{block_index}")
+
+    def _maybe_send_block_end_marker(self) -> None:
+        block_index = self._current_block_index()
+        if block_index is None:
+            return
+        try:
+            round_in_block = int(self.round_in_block or 0)
+            total_rounds = int(self.current_block_total_rounds or 0)
+        except (TypeError, ValueError):
+            return
+        if total_rounds <= 0 or round_in_block != total_rounds:
+            return
+        end_sent = self._block_markers_sent.setdefault("end", set())
+        if block_index in end_sent:
+            return
+        end_sent.add(block_index)
+        self._push_cloud_marker(f"end.block{block_index}")
 
     def prepare_next_round(self, start_immediately: bool = False):
         result = self.controller.prepare_next_round(start_immediately=start_immediately)
@@ -2276,6 +2334,7 @@ class TabletopRoot(FloatLayout):
         self.intro_active = True
         self.p1_pressed = False
         self.p2_pressed = False
+        self._block_markers_sent = {"start": set(), "end": set()}
 
         self.total_rounds_planned = sum(
             len(block.get('rounds') or []) for block in self.blocks
