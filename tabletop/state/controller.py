@@ -55,6 +55,7 @@ class TabletopState:
     in_block_pause: bool = False
     pause_message: str = ""
     post_fixation_start_required: bool = False
+    start_mode: str = "C"
 
 
 @dataclass
@@ -164,6 +165,13 @@ class TabletopController:
             return UXPhase.P1_OUTER if player == 1 else UXPhase.P2_OUTER
         return None
 
+    @staticmethod
+    def is_monetary_block(block_index: int, start_mode: str) -> bool:
+        mode = (start_mode or "C").upper()
+        if mode == "T":
+            return block_index in (1, 3)
+        return block_index in (2, 4)
+
     def get_current_plan(self) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
         state = self.state
         if not state.blocks or state.session_finished or state.in_block_pause:
@@ -235,17 +243,22 @@ class TabletopController:
             else:
                 state.in_block_pause = True
                 next_block = state.blocks[state.current_block_idx]
+                next_block_index_raw = next_block.get("index")
+                try:
+                    next_block_index = int(next_block_index_raw)
+                except (TypeError, ValueError):
+                    next_block_index = state.current_block_idx + 1
                 condition = (
                     "[b]um Punkte[/b] gespielt wird"
-                    if next_block.get("payout")
+                    if self.is_monetary_block(next_block_index, state.start_mode)
                     else "[b]nicht um Punkte[/b] gespielt wird"
-                )         
+                )
                 state.pause_message = (
                     "[b]Blockende[/b]\n"
                     "Dieser Block ist vorbei. Nehmen Sie sich einen Moment zum Durchatmen.\n"
                     "Wenn Sie bereit sind, klicken Sie auf weiter.\n"
                     " \n"
-                    f"Es folgt Block {next_block.get('index')},\n"
+                    f"Es folgt Block {next_block_index},\n"
                     f"in dem {condition}."
                 )
                 state.next_block_preview = {

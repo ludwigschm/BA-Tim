@@ -1,3 +1,4 @@
+#:import ToggleButton kivy.uix.togglebutton.ToggleButton
 #:import IconButton tabletop.ui.widgets.IconButton
 #:import CardWidget tabletop.ui.widgets.CardWidget
 #:import RotatableLabel tabletop.ui.widgets.RotatableLabel
@@ -235,6 +236,38 @@
             text_size: self.width - 2 * 40 * root.scale, self.height - 2 * 40 * root.scale
             padding: 40 * root.scale, 40 * root.scale
             font_size: 64 * root.scale if root.scale else 64
+        Label:
+            id: intro_start_mode_label
+            text: 'Startmodus auswählen:'
+            size_hint: None, None
+            size: root.width * 0.4, 60 * root.scale
+            pos: root.width / 2 - self.width / 2, root.height / 2 - 40 * root.scale
+            font_size: 42 * root.scale if root.scale else 42
+            color: 0, 0, 0, 1
+            halign: 'center'
+            valign: 'middle'
+            text_size: self.size
+
+        ToggleButton:
+            id: intro_start_mode_c
+            text: 'Start C'
+            group: 'intro_start_mode'
+            allow_no_selection: False
+            state: 'down'
+            size_hint: None, None
+            size: 260 * root.scale, 110 * root.scale
+            pos: root.width / 2 - self.width - 20 * root.scale, root.height / 2 - 170 * root.scale
+            font_size: 36 * root.scale if root.scale else 36
+
+        ToggleButton:
+            id: intro_start_mode_t
+            text: 'Start T'
+            group: 'intro_start_mode'
+            allow_no_selection: False
+            size_hint: None, None
+            size: 260 * root.scale, 110 * root.scale
+            pos: root.width / 2 + 20 * root.scale, root.height / 2 - 170 * root.scale
+            font_size: 36 * root.scale if root.scale else 36
 
     Label:
         id: round_badge
