@@ -767,6 +767,7 @@ class TabletopRoot(FloatLayout):
                 'session_id': self.session_id,
                 'aruco_enabled': self.aruco_enabled,
                 'start_block': self.start_block,
+                'start_mode': self.start_mode,
             },
         )
         self._mark_bridge_dirty()
@@ -811,6 +812,14 @@ class TabletopRoot(FloatLayout):
             pause_btn_p2.set_live(False)
             pause_btn_p2.disabled = True
             pause_btn_p2.opacity = 0
+
+        intro_mode_c = self.wid_safe('intro_start_mode_c')
+        if intro_mode_c is not None:
+            intro_mode_c.bind(state=lambda inst, value: self._on_intro_start_mode_toggle('C', value))
+        intro_mode_t = self.wid_safe('intro_start_mode_t')
+        if intro_mode_t is not None:
+            intro_mode_t.bind(state=lambda inst, value: self._on_intro_start_mode_toggle('T', value))
+        self._sync_intro_start_mode_ui()
 
         p1_outer = self.wid_safe('p1_outer')
         if p1_outer is not None:
@@ -965,6 +974,7 @@ class TabletopRoot(FloatLayout):
         intro_overlay = self.wid_safe('intro_overlay')
         if intro_overlay is None:
             return
+        self._sync_intro_start_mode_ui()
         active = bool(self.intro_active)
         if active:
             if intro_overlay.parent is None:
@@ -978,6 +988,39 @@ class TabletopRoot(FloatLayout):
             if intro_overlay.parent is not None:
                 self.remove_widget(intro_overlay)
                 self.bring_start_buttons_to_front()
+
+    def _sync_intro_start_mode_ui(self) -> None:
+        start_mode = (self.start_mode or 'C').upper()
+        btn_c = self.wid_safe('intro_start_mode_c')
+        btn_t = self.wid_safe('intro_start_mode_t')
+        if btn_c is not None:
+            btn_c.state = 'down' if start_mode == 'C' else 'normal'
+        if btn_t is not None:
+            btn_t.state = 'down' if start_mode == 'T' else 'normal'
+
+    def set_start_mode(self, start_mode: str, *, source: Optional[str] = None) -> None:
+        mode = (start_mode or 'C').upper()
+        if mode not in {'C', 'T'}:
+            mode = 'C'
+        if mode == self.start_mode:
+            self._sync_intro_start_mode_ui()
+            return
+        self.start_mode = mode
+        self._sync_intro_start_mode_ui()
+        if self.session_configured:
+            self.log_event(
+                None,
+                'start_mode_selected',
+                {
+                    'start_mode': mode,
+                    'source': source or 'intro_toggle',
+                },
+            )
+
+    def _on_intro_start_mode_toggle(self, start_mode: str, state: str) -> None:
+        if state != 'down':
+            return
+        self.set_start_mode(start_mode, source='intro_toggle')
 
     def _on_window_resize(self, *_):
         self.size = Window.size
