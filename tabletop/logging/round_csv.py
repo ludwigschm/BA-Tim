@@ -126,8 +126,6 @@ ROUND_LOG_HEADER: List[str] = [
     "time_utc_ns",
     "event_timestamp_unix_ns",
     "Gewinner",
-    "Punktestand VP1",
-    "Punktestand VP2",
 ]
 
 
@@ -264,16 +262,6 @@ def write_round_log(
             if winner_vp in (1, 2):
                 winner_label = f"VP{winner_vp}"
 
-    if getattr(app, "score_state", None):
-        score_vp1 = app.score_state.get(1, "")
-        score_vp2 = app.score_state.get(2, "")
-    elif getattr(app, "score_state_round_start", None):
-        score_vp1 = app.score_state_round_start.get(1, "")
-        score_vp2 = app.score_state_round_start.get(2, "")
-    else:
-        score_vp1 = ""
-        score_vp2 = ""
-
     def _card_value(val: Any) -> Any:
         return "" if val is None else val
 
@@ -297,8 +285,6 @@ def write_round_log(
         "time_utc_ns": timestamp_ns,
         "event_timestamp_unix_ns": ts_ns if ts_ns is not None else "",
         "Gewinner": winner_label,
-        "Punktestand VP1": score_vp1,
-        "Punktestand VP2": score_vp2,
     }
     buffer = getattr(app, "round_log_buffer", None)
     if buffer is None:
