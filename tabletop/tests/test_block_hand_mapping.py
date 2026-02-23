@@ -44,3 +44,22 @@ def test_setup_round_sets_block_starter_to_vp2_for_blocks_2_and_3():
     assert state.judge == 1
     assert state.first_player == 2
     assert state.second_player == 1
+
+
+def test_start_mode_controls_monetary_mapping():
+    assert TabletopController.is_monetary_block(1, "C") is False
+    assert TabletopController.is_monetary_block(2, "C") is True
+    assert TabletopController.is_monetary_block(3, "C") is False
+    assert TabletopController.is_monetary_block(4, "C") is True
+
+    assert TabletopController.is_monetary_block(1, "T") is True
+    assert TabletopController.is_monetary_block(2, "T") is False
+    assert TabletopController.is_monetary_block(3, "T") is True
+    assert TabletopController.is_monetary_block(4, "T") is False
+
+
+def test_block_condition_label_matches_start_mode():
+    assert TabletopController.block_condition_label(1, "C") == "unmasked"
+    assert TabletopController.block_condition_label(2, "C") == "masked"
+    assert TabletopController.block_condition_label(1, "T") == "masked"
+    assert TabletopController.block_condition_label(2, "T") == "unmasked"

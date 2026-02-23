@@ -199,13 +199,15 @@ def write_round_log(
     block_number = ""
     round_in_block = ""
     if getattr(app, "current_block_info", None):
-        block_condition = "pay" if app.current_round_has_stake else "no_pay"
+        block_index = app.current_block_info.get("index")
+        block_condition = app.controller.block_condition_label(block_index, app.start_mode)
         block_number = app.current_block_info["index"]
         round_in_block = app.round_in_block
     elif getattr(app, "next_block_preview", None):
         block = app.next_block_preview.get("block")
         if block:
-            block_condition = "pay" if block.get("payout") else "no_pay"
+            block_index = block.get("index")
+            block_condition = app.controller.block_condition_label(block_index, app.start_mode)
             block_number = block.get("index", "")
             round_in_block = app.next_block_preview.get("round_in_block", "")
 
