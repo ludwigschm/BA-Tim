@@ -365,12 +365,30 @@ class TabletopRoot(FloatLayout):
         players = set(self._bridge_players)
         if not players:
             with suppress(AttributeError):
-                detected = self._bridge.connected_players()
+                try:
+                    detected = self._bridge.connected_players()
+                except Exception:
+                    log.warning(
+                        "Bridge connected_players() fehlgeschlagen – ohne Eye-Tracker wird fortgefahren.",
+                        exc_info=True,
+                    )
+                    detected = []
                 if detected:
                     players = {p for p in detected if p}
                     self._bridge_players = players
 
-        return [player for player in players if self._bridge.is_connected(player)]
+        ready_players: List[str] = []
+        for player in players:
+            try:
+                if self._bridge.is_connected(player):
+                    ready_players.append(player)
+            except Exception:
+                log.warning(
+                    "Bridge is_connected(%s) fehlgeschlagen – Player wird übersprungen.",
+                    player,
+                    exc_info=True,
+                )
+        return ready_players
 
     def _current_bridge_block_index(self) -> Optional[int]:
         block_info = self.current_block_info
@@ -431,9 +449,16 @@ class TabletopRoot(FloatLayout):
         for player in players:
             if player in self._bridge_recordings_active and not block_changed:
                 continue
-            self._bridge.start_recording(session_value, block_value, player)
-            if self._bridge.is_recording(player):
-                self._bridge_recordings_active.add(player)
+            try:
+                self._bridge.start_recording(session_value, block_value, player)
+                if self._bridge.is_recording(player):
+                    self._bridge_recordings_active.add(player)
+            except Exception:
+                log.warning(
+                    "Bridge start_recording fehlgeschlagen für %s – ohne Recording wird fortgefahren.",
+                    player,
+                    exc_info=True,
+                )
 
         if self._bridge_recordings_active:
             self._bridge_recording_block = block_value
@@ -506,8 +531,7 @@ class TabletopRoot(FloatLayout):
     def _calibrate_time_offset_once(self) -> None:
         """Calibrate the companion clock offset exactly once.
 
-        The experiment must not start without a measured offset. Any error
-        bubbles up as a hard failure to keep the run in a known state.
+        If no bridge/device is available, continue without offset calibration.
         """
 
         if self._time_offset_calibrated:
@@ -522,15 +546,25 @@ class TabletopRoot(FloatLayout):
 
         players = self._bridge_ready_players()
         if not players:
-            raise RuntimeError(
-                "Keine verbundenen Pupil Labs Geräte für die Clock-Offset-Messung."
+            self.time_offset_ns = None
+            self._time_offset_by_player = {}
+            self._time_offset_calibrated = True
+            log.warning(
+                "Keine verbundenen Pupil Labs Geräte für die Clock-Offset-Messung – ohne Eye-Tracking wird fortgefahren."
             )
+            return
 
         try:
             offsets = bridge.calibrate_time_offset(players=players)
         except Exception:
-            log.exception("Clock-Offset-Messung fehlgeschlagen – Experiment wird abgebrochen.")
-            raise
+            self.time_offset_ns = None
+            self._time_offset_by_player = {}
+            self._time_offset_calibrated = True
+            log.warning(
+                "Clock-Offset-Messung fehlgeschlagen – Experiment läuft ohne Bridge-Offset weiter.",
+                exc_info=True,
+            )
+            return
 
         log_dir = getattr(self, "log_dir", None)
         if isinstance(log_dir, Path):
