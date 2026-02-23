@@ -173,6 +173,14 @@ class TabletopController:
         return block_index in (2, 4)
 
     @staticmethod
+    def block_condition_label(block_index: int, start_mode: str) -> str:
+        return (
+            "masked"
+            if TabletopController.is_monetary_block(block_index, start_mode)
+            else "unmasked"
+        )
+
+    @staticmethod
     def should_swap_vp_hands(block_index: int) -> bool:
         return block_index in (2, 3)
 
@@ -315,7 +323,10 @@ class TabletopController:
                 self.update_turn_order()
             state.next_block_preview = None
             state.round_in_block = state.current_round_idx + 1
-            state.current_round_has_stake = bool(block.get("payout"))
+            block_index = self._normalized_block_index(block)
+            state.current_round_has_stake = self.is_monetary_block(
+                block_index, state.start_mode
+            )
             state.current_block_total_rounds = len(block.get("rounds") or [])
             state.score_state = None
             state.score_state_block = None
