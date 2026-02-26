@@ -1995,6 +1995,18 @@ class TabletopRoot(FloatLayout):
             if display is not None:
                 display.text = self.format_user_display_text(vp)
 
+    def _ensure_pause_cover_on_top(self) -> None:
+        pause_cover = self.ids.get("pause_cover")
+        if pause_cover is None:
+            return
+
+        parent = pause_cover.parent if pause_cover.parent is not None else self
+
+        if pause_cover.parent is parent:
+            parent.remove_widget(pause_cover)
+        parent.add_widget(pause_cover)
+        pause_cover.canvas.ask_update()
+
     def update_pause_overlay(self):
         pause_cover = self.wid_safe('pause_cover')
         if pause_cover is None:
@@ -2004,22 +2016,16 @@ class TabletopRoot(FloatLayout):
         buttons_active = self.in_block_pause
 
         if active:
-            parent = pause_cover.parent
-            if parent is None:
+            if pause_cover.parent is None:
                 self.add_widget(pause_cover)
-                parent = pause_cover.parent
-            if parent is not None:
-                try:
-                    parent.remove_widget(pause_cover)
-                except Exception:
-                    pass
-                parent.add_widget(pause_cover)
 
             pause_cover.opacity = 1
             pause_cover.disabled = False
 
             # Start buttons should be above the overlay
             self.bring_start_buttons_to_front()
+            self._ensure_pause_cover_on_top()
+            Clock.schedule_once(lambda dt: self._ensure_pause_cover_on_top(), 0)
 
             for label_id in self.pause_labels.values():
                 lbl = self.wid_safe(label_id)
@@ -2048,7 +2054,7 @@ class TabletopRoot(FloatLayout):
                 btn.set_live(False)
 
             if pause_cover.parent is not None:
-                self.remove_widget(pause_cover)
+                pause_cover.parent.remove_widget(pause_cover)
 
             # Keep start buttons order consistent
             self.bring_start_buttons_to_front()
