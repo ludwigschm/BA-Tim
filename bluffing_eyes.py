@@ -1,4 +1,6 @@
 """Minimal starter to launch the tabletop Kivy application."""
+from __future__ import annotations
+
 import os, sys
 
 if sys.platform.startswith("win"):
@@ -8,7 +10,6 @@ if sys.platform.startswith("win"):
 
 # erst danach Kivy importieren
 from kivy.app import App
-from __future__ import annotations
 
 import argparse
 import os
