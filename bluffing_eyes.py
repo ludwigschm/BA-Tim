@@ -1,5 +1,13 @@
 """Minimal starter to launch the tabletop Kivy application."""
+import os, sys
 
+if sys.platform.startswith("win"):
+    os.environ.setdefault("KIVY_GL_BACKEND", "angle_sdl2")  # DirectX/ANGLE statt Treiber-OpenGL
+    # optional für Debug:
+    # os.environ.setdefault("KIVY_LOG_LEVEL", "info")
+
+# erst danach Kivy importieren
+from kivy.app import App
 from __future__ import annotations
 
 import argparse
