@@ -85,3 +85,64 @@ def test_practice_block_transition_triggers_visible_pause(monkeypatch):
         "Wenn Sie bereit sind, klicken Sie auf Weiter."
     )
     assert view.pause_message == expected_message
+
+
+def test_pause_overlay_remains_attached_after_multiple_toggles(monkeypatch):
+    blocks = load_blocks()
+    state = _make_practice_state(blocks)
+    controller = TabletopController(state)
+    monkeypatch.setattr(tabletop_view, "resolve_background_texture", lambda: None)
+
+    view = TabletopRoot(controller=controller, state=state)
+    pause_cover = DummyPauseCover()
+    pause_cover.opacity = 0
+    pause_cover.disabled = True
+    view.pause_cover = pause_cover
+    view.ids["pause_cover"] = pause_cover
+    view.add_widget(pause_cover)
+
+    for _ in range(3):
+        view.in_block_pause = True
+        view.session_finished = False
+        view.pause_message = "Pause"
+        view.update_pause_overlay()
+        assert pause_cover.opacity == 1
+        assert pause_cover.disabled is False
+        assert pause_cover.parent is view
+
+        view.in_block_pause = False
+        view.session_finished = False
+        view.update_pause_overlay()
+        assert pause_cover.opacity == 0
+        assert pause_cover.disabled is True
+        assert pause_cover.parent is view
+
+
+def test_pause_overlay_uses_object_property_when_id_proxy_is_invalid(monkeypatch):
+    blocks = load_blocks()
+    state = _make_practice_state(blocks)
+    controller = TabletopController(state)
+    monkeypatch.setattr(tabletop_view, "resolve_background_texture", lambda: None)
+
+    view = TabletopRoot(controller=controller, state=state)
+    pause_cover = DummyPauseCover()
+    pause_cover.opacity = 0
+    pause_cover.disabled = True
+    view.pause_cover = pause_cover
+    view.add_widget(pause_cover)
+
+    class BrokenProxy:
+        @property
+        def opacity(self):
+            raise ReferenceError("dangling weak proxy")
+
+    view.ids["pause_cover"] = BrokenProxy()
+    view.in_block_pause = True
+    view.session_finished = False
+    view.pause_message = "Pause"
+
+    view.update_pause_overlay()
+
+    assert pause_cover.opacity == 1
+    assert pause_cover.disabled is False
+    assert pause_cover.parent is view
