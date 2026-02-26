@@ -17,6 +17,7 @@ from kivy.core.window import Window
 from kivy.properties import DictProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
@@ -279,6 +280,10 @@ class TabletopRoot(FloatLayout):
             Clock.schedule_once(self._configure_session_from_cli, 0.1)
         else:
             Clock.schedule_once(lambda *_: self.prompt_session_number(), 0.1)
+
+    def on_kv_post(self, base_widget):
+        super().on_kv_post(base_widget)
+        self._ensure_pause_overlay_initialized()
 
     def __setattr__(self, key, value):
         if key == 'start_mode':
@@ -797,6 +802,7 @@ class TabletopRoot(FloatLayout):
 
     # --- Layout & Elemente
     def _configure_widgets(self):
+        self._ensure_pause_overlay_initialized()
         btn_start_p1 = self.wid_safe('btn_start_p1')
         if btn_start_p1 is not None:
             btn_start_p1.bind(on_press=lambda *_: self.start_pressed(1))
@@ -915,8 +921,9 @@ class TabletopRoot(FloatLayout):
             1: 'pause_label_p1',
             2: 'pause_label_p2',
         }
+        self._pause_label_widgets = {}
         for player, label_id in self.pause_labels.items():
-            label = self.wid_safe(label_id)
+            label = self._get_pause_label_widget(player)
             if label is not None:
                 label.set_rotation(0 if player == 1 else 180)
                 label.bind(texture_size=lambda *_: None)
@@ -925,6 +932,7 @@ class TabletopRoot(FloatLayout):
             1: 'pause_btn_p1',
             2: 'pause_btn_p2',
         }
+        self._pause_button_widgets = {}
 
         fixation_overlay = self.wid_safe('fixation_overlay')
         if fixation_overlay is not None:
@@ -977,6 +985,132 @@ class TabletopRoot(FloatLayout):
         if btn_start_p2 is not None and btn_start_p2.parent is self:
             self.remove_widget(btn_start_p2)
             self.add_widget(btn_start_p2)
+
+    @staticmethod
+    def _widget_is_alive(widget: Any) -> bool:
+        if widget is None:
+            return False
+        try:
+            _ = widget.parent
+        except ReferenceError:
+            return False
+        return True
+
+    def _build_pause_cover_widget(self) -> FloatLayout:
+        pause_cover = FloatLayout(size_hint=(1, 1), opacity=0, disabled=True)
+        with pause_cover.canvas.before:
+            Color(0.75, 0.75, 0.75, 1)
+            bg_rect = Rectangle(pos=pause_cover.pos, size=pause_cover.size)
+
+        pause_cover.bind(pos=lambda instance, _: setattr(bg_rect, "pos", instance.pos))
+        pause_cover.bind(size=lambda instance, _: setattr(bg_rect, "size", instance.size))
+
+        label_p1 = RotatableLabel(
+            size_hint=(None, None),
+            halign='center',
+            valign='middle',
+            color=(0, 0, 0, 1),
+            markup=True,
+        )
+        label_p2 = RotatableLabel(
+            size_hint=(None, None),
+            halign='center',
+            valign='middle',
+            color=(0, 0, 0, 1),
+            markup=True,
+        )
+        btn_p1 = IconButton(
+            source_normal=ASSETS['play']['stop'],
+            source_down=ASSETS['play']['live'],
+            size_hint=(None, None),
+        )
+        btn_p2 = IconButton(
+            source_normal=ASSETS['play']['stop'],
+            source_down=ASSETS['play']['live'],
+            size_hint=(None, None),
+        )
+        btn_p1.bind(on_press=lambda *_: self.start_pressed(1))
+        btn_p2.bind(on_press=lambda *_: self.start_pressed(2))
+        btn_p1.set_rotation(0)
+        btn_p2.set_rotation(180)
+        btn_p1.set_live(False)
+        btn_p2.set_live(False)
+        btn_p1.opacity = 0
+        btn_p2.opacity = 0
+        btn_p1.disabled = True
+        btn_p2.disabled = True
+        label_p1.set_rotation(0)
+        label_p2.set_rotation(180)
+
+        pause_cover.add_widget(label_p1)
+        pause_cover.add_widget(label_p2)
+        pause_cover.add_widget(btn_p1)
+        pause_cover.add_widget(btn_p2)
+
+        def _refresh_geometry(*_args: Any) -> None:
+            scale = self.scale or 1.0
+            btn_size = 360 * self.button_scale * scale
+            btn_p1.size = (btn_size, btn_size)
+            btn_p2.size = (btn_size, btn_size)
+            btn_p1.pos = (self.width - self.horizontal_margin_px - btn_size - 120 * scale, 300 * scale)
+            btn_p2.pos = (self.horizontal_margin_px + 120 * scale, self.height - 300 * scale - btn_size)
+
+            label_size = (self.width * 0.8, self.height * 0.25)
+            label_p1.size = label_size
+            label_p2.size = label_size
+            label_p1.pos = (self.width * 0.1, 600 * scale)
+            label_p2.pos = (self.width * 0.1, self.height - 600 * scale - label_size[1])
+            label_p1.text_size = label_size
+            label_p2.text_size = label_size
+            label_p1.font_size = 56 * scale
+            label_p2.font_size = 56 * scale
+
+        self.bind(size=_refresh_geometry, scale=_refresh_geometry, button_scale=_refresh_geometry, horizontal_margin_px=_refresh_geometry)
+        _refresh_geometry()
+
+        self.pause_labels = {1: 'pause_label_p1', 2: 'pause_label_p2'}
+        self.pause_start_buttons = {1: 'pause_btn_p1', 2: 'pause_btn_p2'}
+        self._pause_label_widgets = {1: label_p1, 2: label_p2}
+        self._pause_button_widgets = {1: btn_p1, 2: btn_p2}
+        return pause_cover
+
+    def _ensure_pause_overlay_initialized(self) -> FloatLayout:
+        pause_cover = self.pause_cover if self._widget_is_alive(self.pause_cover) else None
+        if pause_cover is None:
+            pause_cover = self.ids.get('pause_cover')
+            if not self._widget_is_alive(pause_cover):
+                pause_cover = self._build_pause_cover_widget()
+                self.add_widget(pause_cover)
+            self.pause_cover = pause_cover
+        if not hasattr(self, '_pause_label_widgets'):
+            self._pause_label_widgets = {}
+        if not hasattr(self, '_pause_button_widgets'):
+            self._pause_button_widgets = {}
+        return pause_cover
+
+    def _get_pause_label_widget(self, player: int):
+        widget = getattr(self, '_pause_label_widgets', {}).get(player)
+        if self._widget_is_alive(widget):
+            return widget
+        label_id = self.pause_labels.get(player)
+        if label_id:
+            widget = self.wid_safe(label_id)
+            if self._widget_is_alive(widget):
+                self._pause_label_widgets[player] = widget
+                return widget
+        return None
+
+    def _get_pause_button_widget(self, player: int):
+        widget = getattr(self, '_pause_button_widgets', {}).get(player)
+        if self._widget_is_alive(widget):
+            return widget
+        btn_id = getattr(self, 'pause_start_buttons', {}).get(player)
+        if btn_id:
+            widget = self.wid_safe(btn_id)
+            if self._widget_is_alive(widget):
+                self._pause_button_widgets[player] = widget
+                return widget
+        return None
 
     def update_intro_overlay(self):
         intro_overlay = self.wid_safe('intro_overlay')
@@ -1995,44 +2129,39 @@ class TabletopRoot(FloatLayout):
             if display is not None:
                 display.text = self.format_user_display_text(vp)
 
-    def _ensure_pause_cover_on_top(self) -> None:
-        pause_cover = self.ids.get("pause_cover")
-        if pause_cover is None:
+    def ensure_overlay_on_top(self, widget: Any, parent: Optional[Any] = None) -> None:
+        if not self._widget_is_alive(widget):
             return
-
-        parent = pause_cover.parent if pause_cover.parent is not None else self
-
-        if pause_cover.parent is parent:
-            parent.remove_widget(pause_cover)
-        parent.add_widget(pause_cover)
-        pause_cover.canvas.ask_update()
+        target_parent = parent or widget.parent or self
+        if widget.parent is target_parent:
+            target_parent.remove_widget(widget)
+        target_parent.add_widget(widget)
+        widget.canvas.ask_update()
 
     def update_pause_overlay(self):
-        pause_cover = self.wid_safe('pause_cover')
-        if pause_cover is None:
-            return
+        pause_cover = self._ensure_pause_overlay_initialized()
 
         active = self.in_block_pause or self.session_finished
         buttons_active = self.in_block_pause
 
-        if active:
-            if pause_cover.parent is None:
-                self.add_widget(pause_cover)
+        if pause_cover.parent is None:
+            self.add_widget(pause_cover)
 
+        if active:
             pause_cover.opacity = 1
             pause_cover.disabled = False
 
-            # Start buttons should be above the overlay
             self.bring_start_buttons_to_front()
-            self._ensure_pause_cover_on_top()
-            Clock.schedule_once(lambda dt: self._ensure_pause_cover_on_top(), 0)
+            self.ensure_overlay_on_top(pause_cover)
+            Clock.schedule_once(lambda dt: self.ensure_overlay_on_top(pause_cover), 0)
+            Clock.schedule_once(lambda dt: self.ensure_overlay_on_top(pause_cover), 0.05)
 
-            for label_id in self.pause_labels.values():
-                lbl = self.wid_safe(label_id)
+            for player in self.pause_labels:
+                lbl = self._get_pause_label_widget(player)
                 if lbl is not None:
                     lbl.text = self.pause_message or ''
-            for player, btn_id in getattr(self, 'pause_start_buttons', {}).items():
-                btn = self.wid_safe(btn_id)
+            for player in getattr(self, 'pause_start_buttons', {}):
+                btn = self._get_pause_button_widget(player)
                 if btn is None:
                     continue
                 btn.opacity = 1 if buttons_active else 0
@@ -2041,20 +2170,17 @@ class TabletopRoot(FloatLayout):
         else:
             pause_cover.opacity = 0
             pause_cover.disabled = True
-            for label_id in self.pause_labels.values():
-                lbl = self.wid_safe(label_id)
+            for player in self.pause_labels:
+                lbl = self._get_pause_label_widget(player)
                 if lbl is not None:
                     lbl.text = ''
-            for btn_id in getattr(self, 'pause_start_buttons', {}).values():
-                btn = self.wid_safe(btn_id)
+            for player in getattr(self, 'pause_start_buttons', {}):
+                btn = self._get_pause_button_widget(player)
                 if btn is None:
                     continue
                 btn.opacity = 0
                 btn.disabled = True
                 btn.set_live(False)
-
-            if pause_cover.parent is not None:
-                pause_cover.parent.remove_widget(pause_cover)
 
             # Keep start buttons order consistent
             self.bring_start_buttons_to_front()
