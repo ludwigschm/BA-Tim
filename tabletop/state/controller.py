@@ -283,9 +283,9 @@ class TabletopController:
                 except (TypeError, ValueError):
                     next_block_index = state.current_block_idx + 1
                 condition = (
-                    "[b]um Punkte[/b] gespielt wird"
+                    "[b]Masken[/b] getragen werden"
                     if self.is_monetary_block(next_block_index, state.start_mode)
-                    else "[b]nicht um Punkte[/b] gespielt wird"
+                    else "[b]keine Masken[/b] getragen werden"
                 )
                 state.pause_message = (
                     "[b]Blockende[/b]\n"
