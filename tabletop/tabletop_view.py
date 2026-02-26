@@ -245,6 +245,11 @@ class TabletopRoot(FloatLayout):
         self.marker_bridge: Optional[_AsyncMarkerBridge] = _AsyncMarkerBridge(self)
         self._pause_label_widgets: Dict[int, Any] = {}
         self._pause_button_widgets: Dict[int, Any] = {}
+        self._pause_zorder_ev0 = None
+        self._pause_zorder_ev1 = None
+        self._pause_cover_default_size_hint = (1, 1)
+        self._pause_cover_default_size = None
+        self._pause_cover_default_pos = (0, 0)
         if self.perf_logging:
             Clock.schedule_interval(self._log_async_metrics, 1.0)
         self._bridge: Optional["PupilBridge"] = None
@@ -295,6 +300,12 @@ class TabletopRoot(FloatLayout):
         if pause_cover is None:
             pause_cover = self._build_pause_cover_fallback()
         self.pause_cover = pause_cover
+        if self._pause_cover_default_size is None:
+            self._pause_cover_default_size = tuple(self.size)
+        if pause_cover.size_hint is not None:
+            self._pause_cover_default_size_hint = pause_cover.size_hint
+        if tuple(pause_cover.pos) != (-100000, -100000):
+            self._pause_cover_default_pos = tuple(pause_cover.pos)
         if pause_cover.parent is None:
             self.add_widget(pause_cover)
         return pause_cover
@@ -391,6 +402,38 @@ class TabletopRoot(FloatLayout):
             return
         target_parent.remove_widget(widget)
         target_parent.add_widget(widget)
+
+    def _cancel_pause_zorder_events(self):
+        for attr in ('_pause_zorder_ev0', '_pause_zorder_ev1'):
+            event = getattr(self, attr, None)
+            if event is not None:
+                event.cancel()
+                setattr(self, attr, None)
+
+    def _schedule_pause_zorder_events(self, pause_cover):
+        self._cancel_pause_zorder_events()
+        self._pause_zorder_ev0 = Clock.schedule_once(
+            lambda *_: self._zorder_pause_if_active(pause_cover), 0
+        )
+        self._pause_zorder_ev1 = Clock.schedule_once(
+            lambda *_: self._zorder_pause_if_active(pause_cover), 0.05
+        )
+
+    def _zorder_pause_if_active(self, pause_cover):
+        if not (self.in_block_pause or self.session_finished):
+            return
+        self.ensure_overlay_on_top(pause_cover)
+
+    def _set_pause_cover_inactive_hitbox(self, pause_cover):
+        pause_cover.size_hint = (None, None)
+        pause_cover.size = (0, 0)
+        pause_cover.pos = (-100000, -100000)
+
+    def _restore_pause_cover_hitbox(self, pause_cover):
+        pause_cover.size_hint = self._pause_cover_default_size_hint
+        pause_cover.pos = self._pause_cover_default_pos
+        if pause_cover.size_hint is None:
+            pause_cover.size = self._pause_cover_default_size or tuple(self.size)
 
     def __setattr__(self, key, value):
         if key == 'start_mode':
@@ -2117,9 +2160,9 @@ class TabletopRoot(FloatLayout):
         buttons_active = self.in_block_pause
 
         if active:
+            self._restore_pause_cover_hitbox(pause_cover)
             self.ensure_overlay_on_top(pause_cover)
-            Clock.schedule_once(lambda *_: self.ensure_overlay_on_top(pause_cover), 0)
-            Clock.schedule_once(lambda *_: self.ensure_overlay_on_top(pause_cover), 0.05)
+            self._schedule_pause_zorder_events(pause_cover)
 
             pause_cover.opacity = 1
             pause_cover.disabled = False
@@ -2135,8 +2178,10 @@ class TabletopRoot(FloatLayout):
                 btn.disabled = not buttons_active
                 btn.set_live(buttons_active)
         else:
+            self._cancel_pause_zorder_events()
             pause_cover.opacity = 0
             pause_cover.disabled = True
+            self._set_pause_cover_inactive_hitbox(pause_cover)
             for lbl in self._pause_label_widgets.values():
                 if lbl is not None:
                     lbl.text = ''
