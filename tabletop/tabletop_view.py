@@ -2063,9 +2063,9 @@ class TabletopRoot(FloatLayout):
         block = next_info.get('block') or {}
         payout = block.get('payout')
         if payout:
-            suffix = 'In der nächsten Runde spielen Sie um Punkte und Lose.'
+            suffix = 'In der nächsten Runde spielen Sie mit Masken.'
         else:
-            suffix = 'In der nächsten Runde spielen Sie zum Spaß.'
+            suffix = 'In der nächsten Runde spielen Sie ohne Masken.'
         return f"{base}\n{suffix}"
 
     def describe_level(self, level:str) -> str:
